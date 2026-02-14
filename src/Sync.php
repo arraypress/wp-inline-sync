@@ -181,6 +181,7 @@ final class Sync {
 			'of'            => __( 'of', 'arraypress' ),
 			'syncFailed'    => __( 'Sync failed. Please try again.', 'arraypress' ),
 			'dismiss'       => __( 'Dismiss', 'arraypress' ),
+			'reloading'     => __( 'Reloading…', 'arraypress' ),
 		];
 	}
 

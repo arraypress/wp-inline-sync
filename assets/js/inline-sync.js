@@ -379,13 +379,18 @@
                 html += '</div>';
             }
 
-            html += '<button type="button" class="inline-sync-dismiss">' + i18n.dismiss + '</button>';
+            html += '<span class="inline-sync-reloading">' + i18n.reloading + '</span>';
 
             $bar.find('.inline-sync-result').html(html).show();
 
             this._enableTrigger(syncId);
 
             $(document).trigger('inline-sync:complete', [syncId, totals]);
+
+            // Auto-reload after brief delay so user can read the summary
+            setTimeout(function () {
+                window.location.reload();
+            }, 1500);
         },
 
         /**
