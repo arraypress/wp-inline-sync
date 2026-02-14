@@ -1,0 +1,184 @@
+/**
+ * Inline Sync Styles
+ *
+ * Minimal styles for the sync progress bar and completion notice.
+ * Designed to sit above admin tables without disrupting layout.
+ *
+ * @package ArrayPress\InlineSync
+ * @since   1.0.0
+ */
+
+/* =========================================================================
+   Container
+   ========================================================================= */
+
+.inline-sync-bar {
+    display: none;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-left: 4px solid #2271b1;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.inline-sync-bar.is-active {
+    display: block;
+}
+
+.inline-sync-bar.is-complete {
+    border-left-color: #00a32a;
+}
+
+.inline-sync-bar.is-error {
+    border-left-color: #d63638;
+}
+
+/* =========================================================================
+   Header (title + cancel)
+   ========================================================================= */
+
+.inline-sync-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.inline-sync-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.inline-sync-cancel {
+    font-size: 12px;
+    color: #b32d2e;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+}
+
+.inline-sync-cancel:hover {
+    color: #9a2021;
+    text-decoration: underline;
+}
+
+/* =========================================================================
+   Progress Track
+   ========================================================================= */
+
+.inline-sync-progress {
+    margin-bottom: 8px;
+}
+
+.inline-sync-track {
+    height: 8px;
+    background: #f0f0f1;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.inline-sync-fill {
+    height: 100%;
+    background: #2271b1;
+    border-radius: 4px;
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+.is-complete .inline-sync-fill {
+    background: #00a32a;
+}
+
+.is-error .inline-sync-fill {
+    background: #d63638;
+}
+
+/* =========================================================================
+   Status Line (count + current item name)
+   ========================================================================= */
+
+.inline-sync-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #646970;
+    line-height: 1.4;
+}
+
+.inline-sync-count {
+    flex-shrink: 0;
+}
+
+.inline-sync-current {
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+    font-style: italic;
+    color: #787c82;
+}
+
+/* =========================================================================
+   Result Notice (shown on complete/error/cancel)
+   ========================================================================= */
+
+.inline-sync-result {
+    display: none;
+    font-size: 13px;
+    color: #1d2327;
+    line-height: 1.5;
+}
+
+/* Show result, hide progress when finished */
+.inline-sync-bar.is-complete .inline-sync-result,
+.inline-sync-bar.is-error .inline-sync-result {
+    display: block;
+}
+
+.inline-sync-bar.is-complete .inline-sync-progress,
+.inline-sync-bar.is-error .inline-sync-progress,
+.inline-sync-bar.is-complete .inline-sync-status,
+.inline-sync-bar.is-error .inline-sync-status,
+.inline-sync-bar.is-complete .inline-sync-cancel,
+.inline-sync-bar.is-error .inline-sync-cancel {
+    display: none;
+}
+
+.inline-sync-dismiss {
+    font-size: 12px;
+    color: #2271b1;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+    margin-left: 12px;
+}
+
+.inline-sync-dismiss:hover {
+    color: #135e96;
+    text-decoration: underline;
+}
+
+.inline-sync-error-summary {
+    color: #d63638;
+    margin-top: 4px;
+    font-size: 12px;
+}
+
+/* =========================================================================
+   Trigger Button (disabled state while syncing)
+   ========================================================================= */
+
+.inline-sync-trigger.is-syncing {
+    opacity: 0.6;
+    pointer-events: none;
+}
