@@ -62,22 +62,24 @@ final class Sync {
 	/**
 	 * Constructor.
 	 *
+	 * @param string      $id               Unique identifier for this sync.
+	 * @param array       $config           {
+	 *                                      Configuration array.
+	 *
+	 * @type string|array $hook_suffix      Admin screen hook suffix(es) where assets load.
+	 * @type string       $capability       Required user capability. Default 'manage_options'.
+	 * @type string       $title            Display title shown in the progress bar.
+	 * @type string       $button_label     Button text. Default 'Sync'.
+	 * @type string       $button_class     CSS class for the button. Default 'button'.
+	 * @type string       $container        CSS selector for the element the bar inserts before. Default
+	 *       '.wp-list-table'.
+	 * @type callable     $data_callback    Fetches items. Receives (string $cursor). Returns array with items,
+	 *       has_more, cursor, total.
+	 * @type callable     $process_callback Processes one item. Returns 'created'|'updated'|'skipped'|WP_Error.
+	 * @type callable     $name_callback    Extracts display name from an item. Receives (mixed $item). Returns string.
+	 *                                      }
 	 * @since 1.0.0
 	 *
-	 * @param string $id     Unique identifier for this sync.
-	 * @param array  $config {
-	 *     Configuration array.
-	 *
-	 *     @type string|array $hook_suffix      Admin screen hook suffix(es) where assets load.
-	 *     @type string       $capability       Required user capability. Default 'manage_options'.
-	 *     @type string       $title            Display title shown in the progress bar.
-	 *     @type string       $button_label     Button text. Default 'Sync'.
-	 *     @type string       $button_class     CSS class for the button. Default 'button'.
-	 *     @type string       $container        CSS selector for the element the bar inserts before. Default '.wp-list-table'.
-	 *     @type callable     $data_callback    Fetches items. Receives (string $cursor). Returns array with items, has_more, cursor, total.
-	 *     @type callable     $process_callback Processes one item. Returns 'created'|'updated'|'skipped'|WP_Error.
-	 *     @type callable     $name_callback    Extracts display name from an item. Receives (mixed $item). Returns string.
-	 * }
 	 */
 	public function __construct( string $id, array $config ) {
 		$this->id     = sanitize_key( $id );
@@ -92,9 +94,10 @@ final class Sync {
 	/**
 	 * Conditionally enqueue assets on matching screens.
 	 *
+	 * @param string $hook_suffix The current admin page hook suffix.
+	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $hook_suffix The current admin page hook suffix.
 	 */
 	public function maybe_enqueue_assets( string $hook_suffix ): void {
 		if ( ! $this->is_target_screen( $hook_suffix ) ) {
@@ -111,11 +114,11 @@ final class Sync {
 	/**
 	 * Check if the current screen matches a target hook suffix.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param string $hook_suffix The current admin page hook suffix.
 	 *
 	 * @return bool
+	 * @since 1.0.0
+	 *
 	 */
 	public function is_target_screen( string $hook_suffix ): bool {
 		$targets = (array) $this->config['hook_suffix'];
@@ -152,8 +155,8 @@ final class Sync {
 			'InlineSyncConfig.syncs[%s] = %s;',
 			wp_json_encode( $this->id ),
 			wp_json_encode( [
-				'title'      => $this->config['title'],
-				'container'  => $this->config['container'],
+				'title'     => $this->config['title'],
+				'container' => $this->config['container'],
 			] )
 		), 'before' );
 	}
@@ -161,9 +164,9 @@ final class Sync {
 	/**
 	 * Get translatable strings for JavaScript.
 	 *
+	 * @return array
 	 * @since 1.0.0
 	 *
-	 * @return array
 	 */
 	private function get_i18n_strings(): array {
 		return [
@@ -195,15 +198,15 @@ final class Sync {
 	 * Outputs a button with data attributes that the JS auto-binds to.
 	 * No manual JavaScript calls needed.
 	 *
+	 * @param array $args      {
+	 *                         Optional. Override button attributes.
+	 *
+	 * @type string $label     Button text. Default from config.
+	 * @type string $class     CSS classes. Default from config.
+	 * @type string $container Target container selector. Default from config.
+	 *                         }
 	 * @since 1.0.0
 	 *
-	 * @param array $args {
-	 *     Optional. Override button attributes.
-	 *
-	 *     @type string $label     Button text. Default from config.
-	 *     @type string $class     CSS classes. Default from config.
-	 *     @type string $container Target container selector. Default from config.
-	 * }
 	 */
 	public function render_button( array $args = [] ): void {
 		if ( ! current_user_can( $this->config['capability'] ) ) {
@@ -215,7 +218,7 @@ final class Sync {
 		$container = $args['container'] ?? $this->config['container'];
 
 		printf(
-			'<button type="button" class="%s inline-sync-trigger" data-sync-id="%s" data-container="%s">%s</button>',
+			'<button type="button" class="%s inline-sync-trigger" data-sync-id="%s" data-container="%s"><span class="dashicons dashicons-update"></span> %s</button>',
 			esc_attr( $class ),
 			esc_attr( $this->id ),
 			esc_attr( $container ),
@@ -223,16 +226,17 @@ final class Sync {
 		);
 	}
 
+
 	/**
 	 * Get the sync trigger button HTML.
 	 *
 	 * Returns the button markup instead of echoing it.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param array $args Optional. Override button attributes. See render_button().
 	 *
 	 * @return string Button HTML.
+	 * @since 1.0.0
+	 *
 	 */
 	public function get_button( array $args = [] ): string {
 		ob_start();
@@ -248,9 +252,9 @@ final class Sync {
 	/**
 	 * Get the sync ID.
 	 *
+	 * @return string
 	 * @since 1.0.0
 	 *
-	 * @return string
 	 */
 	public function get_id(): string {
 		return $this->id;
@@ -259,12 +263,12 @@ final class Sync {
 	/**
 	 * Get a config value.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param string $key     Config key.
 	 * @param mixed  $default Default value.
 	 *
 	 * @return mixed
+	 * @since 1.0.0
+	 *
 	 */
 	public function get_config( string $key, mixed $default = null ): mixed {
 		return $this->config[ $key ] ?? $default;
@@ -273,9 +277,9 @@ final class Sync {
 	/**
 	 * Get the data callback.
 	 *
+	 * @return callable|null
 	 * @since 1.0.0
 	 *
-	 * @return callable|null
 	 */
 	public function get_data_callback(): ?callable {
 		$callback = $this->config['data_callback'];
@@ -286,9 +290,9 @@ final class Sync {
 	/**
 	 * Get the process callback.
 	 *
+	 * @return callable|null
 	 * @since 1.0.0
 	 *
-	 * @return callable|null
 	 */
 	public function get_process_callback(): ?callable {
 		$callback = $this->config['process_callback'];
@@ -299,9 +303,9 @@ final class Sync {
 	/**
 	 * Get the name callback.
 	 *
+	 * @return callable|null
 	 * @since 1.0.0
 	 *
-	 * @return callable|null
 	 */
 	public function get_name_callback(): ?callable {
 		$callback = $this->config['name_callback'];
