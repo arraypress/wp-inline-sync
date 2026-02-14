@@ -1,24 +1,19 @@
 /**
  * Inline Sync Controller
  *
- * Auto-binds to `.inline-sync-trigger` buttons via data attributes.
- * Manages the batch loop, progress bar, current item name display,
- * and dismissable completion notice.
+ * Two-phase sync with visible progress:
  *
- * No stats storage, no history, no error logs. Refresh and it's gone.
+ * 1. FETCH — calls /fetch endpoint, which hits the external API (Stripe, etc.)
+ *    and caches items server-side. Returns item count immediately.
  *
- * Data attributes on trigger buttons:
- *   data-sync-id    — Matches the registered sync ID.
- *   data-container  — CSS selector for the element the bar inserts before.
+ * 2. PROCESS — calls /process endpoint repeatedly in small chunks (5 items).
+ *    Each call returns per-item results. Progress bar and item names update
+ *    after every chunk. Continues until page_done, then fetches next page
+ *    if has_more is true.
  *
- * Public API (for programmatic use):
- *   InlineSync.start( syncId )
- *   InlineSync.cancel( syncId )
- *
- * Events fired on $(document):
- *   'inline-sync:complete'  — (event, syncId, totals)
- *   'inline-sync:cancelled' — (event, syncId)
- *   'inline-sync:error'     — (event, syncId, message)
+ * This ensures the user sees immediate feedback: a "Fetching..." state,
+ * then the progress bar moving with each chunk, with product names rolling
+ * through as items are processed.
  *
  * @package ArrayPress\InlineSync
  * @since   1.0.0
@@ -46,9 +41,6 @@
 
         /**
          * Start a sync by ID.
-         *
-         * Creates or resets the progress bar above the container,
-         * disables the trigger button, and begins batch processing.
          *
          * @param {string} syncId Registered sync ID.
          */
@@ -84,8 +76,8 @@
 
             this._resetBar($bar, config);
 
-            // Start batch loop
-            this._processBatch($bar, syncId, '', {
+            // Start with fetch phase
+            this._fetchPage($bar, syncId, '', {
                 created: 0,
                 updated: 0,
                 skipped: 0,
@@ -106,7 +98,152 @@
         },
 
         // =====================================================================
-        // Internal
+        // Two-Phase Flow
+        // =====================================================================
+
+        /**
+         * Phase 1: Fetch a page of items from the source.
+         *
+         * Calls /fetch, which hits the external API and caches items.
+         * On success, switches to the process loop.
+         *
+         * @param {jQuery} $bar   Bar element.
+         * @param {string} syncId Sync ID.
+         * @param {string} cursor Pagination cursor.
+         * @param {object} totals Running totals.
+         * @private
+         */
+        _fetchPage: function ($bar, syncId, cursor, totals) {
+            if (cancelled[syncId]) {
+                this._showCancelled($bar, syncId);
+                return;
+            }
+
+            // Show fetching state
+            const config = syncs[syncId] || {};
+            $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.fetching);
+
+            $.ajax({
+                url: restUrl + 'fetch',
+                method: 'POST',
+                headers: {'X-WP-Nonce': restNonce},
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    sync_id: syncId,
+                    cursor: cursor
+                })
+            }).done((response) => {
+                if (cancelled[syncId]) {
+                    this._showCancelled($bar, syncId);
+                    return;
+                }
+
+                // Track total if provided
+                if (response.total) {
+                    totals.total = response.total;
+                }
+
+                // Store pagination info for after processing
+                const pageInfo = {
+                    has_more: response.has_more,
+                    cursor: response.cursor,
+                    fetched: response.fetched
+                };
+
+                // Update title to syncing
+                $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.syncing);
+
+                if (response.fetched === 0) {
+                    // Nothing fetched — done
+                    this._showComplete($bar, syncId, totals);
+                    return;
+                }
+
+                // If we don't have a total from the API, use fetched count
+                // (accumulates across pages)
+                if (!totals.total) {
+                    totals._fetched = (totals._fetched || 0) + response.fetched;
+                }
+
+                // Start processing chunks
+                this._processChunk($bar, syncId, totals, pageInfo);
+
+            }).fail((xhr) => {
+                const msg = xhr.responseJSON?.message || i18n.syncFailed;
+                this._showError($bar, syncId, msg);
+            });
+        },
+
+        /**
+         * Phase 2: Process a chunk of cached items.
+         *
+         * Calls /process repeatedly until page_done, then either
+         * fetches the next page or shows completion.
+         *
+         * @param {jQuery} $bar      Bar element.
+         * @param {string} syncId    Sync ID.
+         * @param {object} totals    Running totals.
+         * @param {object} pageInfo  Pagination info from fetch.
+         * @private
+         */
+        _processChunk: function ($bar, syncId, totals, pageInfo) {
+            if (cancelled[syncId]) {
+                this._showCancelled($bar, syncId);
+                return;
+            }
+
+            $.ajax({
+                url: restUrl + 'process',
+                method: 'POST',
+                headers: {'X-WP-Nonce': restNonce},
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    sync_id: syncId
+                })
+            }).done((response) => {
+                if (cancelled[syncId]) {
+                    this._showCancelled($bar, syncId);
+                    return;
+                }
+
+                // Accumulate results
+                totals.created += response.created || 0;
+                totals.updated += response.updated || 0;
+                totals.skipped += response.skipped || 0;
+                totals.failed += response.failed || 0;
+                totals.processed += response.processed || 0;
+
+                // Collect errors
+                if (response.items) {
+                    response.items.forEach(function (item) {
+                        if (item.status === 'failed' && item.error) {
+                            totals.errors.push(item.name + ': ' + item.error);
+                        }
+                    });
+                }
+
+                // Update progress bar
+                this._updateProgress($bar, totals, response.items);
+
+                if (!response.page_done) {
+                    // More chunks in this page
+                    this._processChunk($bar, syncId, totals, pageInfo);
+                } else if (pageInfo.has_more) {
+                    // This page done, but more pages available
+                    this._fetchPage($bar, syncId, pageInfo.cursor, totals);
+                } else {
+                    // All done
+                    this._showComplete($bar, syncId, totals);
+                }
+
+            }).fail((xhr) => {
+                const msg = xhr.responseJSON?.message || i18n.syncFailed;
+                this._showError($bar, syncId, msg);
+            });
+        },
+
+        // =====================================================================
+        // UI
         // =====================================================================
 
         /**
@@ -154,7 +291,7 @@
          */
         _resetBar: function ($bar, config) {
             $bar.removeClass('is-complete is-error').addClass('is-active');
-            $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.syncing);
+            $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.fetching);
             $bar.find('.inline-sync-fill').css('width', '0%');
             $bar.find('.inline-sync-count').text('');
             $bar.find('.inline-sync-current').text('');
@@ -165,93 +302,31 @@
         },
 
         /**
-         * Process a single batch and recurse.
-         *
-         * @param {jQuery} $bar   Bar element.
-         * @param {string} syncId Sync ID.
-         * @param {string} cursor Pagination cursor.
-         * @param {object} totals Running totals.
-         * @private
-         */
-        _processBatch: function ($bar, syncId, cursor, totals) {
-            if (cancelled[syncId]) {
-                this._showCancelled($bar, syncId);
-                return;
-            }
-
-            $.ajax({
-                url: restUrl + 'batch',
-                method: 'POST',
-                headers: {'X-WP-Nonce': restNonce},
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    sync_id: syncId,
-                    cursor: cursor
-                })
-            }).done((response) => {
-                if (cancelled[syncId]) {
-                    this._showCancelled($bar, syncId);
-                    return;
-                }
-
-                // Accumulate
-                totals.created += response.created || 0;
-                totals.updated += response.updated || 0;
-                totals.skipped += response.skipped || 0;
-                totals.failed += response.failed || 0;
-                totals.processed += response.processed || 0;
-
-                if (response.total) {
-                    totals.total = response.total;
-                }
-
-                // Collect errors
-                if (response.items) {
-                    response.items.forEach(function (item) {
-                        if (item.status === 'failed' && item.error) {
-                            totals.errors.push(item.name + ': ' + item.error);
-                        }
-                    });
-                }
-
-                // Update progress
-                this._updateProgress($bar, totals, response.items);
-
-                if (response.has_more) {
-                    this._processBatch($bar, syncId, response.cursor, totals);
-                } else {
-                    this._showComplete($bar, syncId, totals);
-                }
-
-            }).fail((xhr) => {
-                const msg = xhr.responseJSON?.message || i18n.syncFailed;
-                this._showError($bar, syncId, msg);
-            });
-        },
-
-        /**
          * Update progress bar and current item.
          *
          * @param {jQuery} $bar   Bar element.
          * @param {object} totals Running totals.
-         * @param {array}  items  Items from current batch.
+         * @param {array}  items  Items from current chunk.
          * @private
          */
         _updateProgress: function ($bar, totals, items) {
+            // Determine the best total we have
+            const displayTotal = totals.total || totals._fetched || null;
+
             // Percentage
             let pct = 0;
-            if (totals.total && totals.total > 0) {
-                pct = Math.min(100, Math.round((totals.processed / totals.total) * 100));
+            if (displayTotal && displayTotal > 0) {
+                pct = Math.min(100, Math.round((totals.processed / displayTotal) * 100));
             }
             $bar.find('.inline-sync-fill').css('width', pct + '%');
 
-            // Count
-            const countText = totals.total
-                ? totals.processed + ' ' + i18n.of + ' ' + totals.total
+            // Count text
+            const countText = displayTotal
+                ? totals.processed + ' ' + i18n.of + ' ' + displayTotal
                 : totals.processed + ' ' + i18n.items;
             $bar.find('.inline-sync-count').text(countText);
 
-            // Current item name
+            // Current item name (last item in chunk)
             if (items && items.length > 0) {
                 const last = items[items.length - 1].name;
                 if (last) {
@@ -270,6 +345,7 @@
          */
         _showComplete: function ($bar, syncId, totals) {
             $bar.addClass('is-complete');
+            $bar.find('.inline-sync-fill').css('width', '100%');
 
             const config = syncs[syncId] || {};
             $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.complete);
@@ -364,7 +440,7 @@
         },
 
         /**
-         * Re-enable the trigger button after sync finishes.
+         * Re-enable the trigger button.
          *
          * @param {string} syncId Sync ID.
          * @private
