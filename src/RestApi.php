@@ -131,11 +131,11 @@ final class RestApi {
 	/**
 	 * Check if the current user has permission.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param WP_REST_Request $request The request object.
 	 *
 	 * @return bool|WP_Error
+	 * @since 1.0.0
+	 *
 	 */
 	public static function check_permission( WP_REST_Request $request ): bool|WP_Error {
 		$sync_id = $request->get_param( 'sync_id' );
@@ -167,11 +167,11 @@ final class RestApi {
 	 * stores them in a transient keyed by sync_id + user_id, and returns
 	 * the count and pagination info so JS can set up the progress bar.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param WP_REST_Request $request The request object.
 	 *
 	 * @return WP_REST_Response|WP_Error
+	 * @since 1.0.0
+	 *
 	 */
 	public static function handle_fetch( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$sync_id = $request->get_param( 'sync_id' );
@@ -262,11 +262,11 @@ final class RestApi {
 	 * through the process_callback, advances the offset, and returns
 	 * per-item results so JS can update the progress bar after each chunk.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param WP_REST_Request $request The request object.
 	 *
 	 * @return WP_REST_Response|WP_Error
+	 * @since 1.0.0
+	 *
 	 */
 	public static function handle_process( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$sync_id = $request->get_param( 'sync_id' );
@@ -411,11 +411,11 @@ final class RestApi {
 	 * Scoped to the current user to prevent collisions when
 	 * multiple admins sync simultaneously.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param string $sync_id Sync ID.
 	 *
 	 * @return string Transient key.
+	 * @since 1.0.0
+	 *
 	 */
 	private static function get_transient_key( string $sync_id ): string {
 		$user_id = get_current_user_id();
@@ -429,11 +429,11 @@ final class RestApi {
 	 * Tries common name fields on objects and arrays. Used as
 	 * a fallback when no name_callback is provided.
 	 *
-	 * @since 1.0.0
-	 *
 	 * @param mixed $item Item from the data callback.
 	 *
 	 * @return string Display name or empty string.
+	 * @since 1.0.0
+	 *
 	 */
 	private static function guess_item_name( mixed $item ): string {
 		$fields = [ 'name', 'title', 'label', 'product_name', 'email', 'id' ];
