@@ -16,6 +16,8 @@ declare( strict_types=1 );
 
 namespace ArrayPress\InlineSync;
 
+use stdClass;
+
 /**
  * Class Sync
  *
@@ -138,14 +140,14 @@ final class Sync {
 		$handle = 'inline-sync';
 
 		// Enqueue shared assets once
-		if ( ! wp_script_is( $handle, 'enqueued' ) ) {
+		if ( ! wp_script_is( $handle ) ) {
 			wp_enqueue_composer_style( $handle, __FILE__, 'css/inline-sync.css' );
 			wp_enqueue_composer_script( $handle, __FILE__, 'js/inline-sync.js', [ 'jquery' ] );
 
 			wp_localize_script( $handle, 'InlineSyncConfig', [
 				'restUrl'   => rest_url( RestApi::NAMESPACE . '/' ),
 				'restNonce' => wp_create_nonce( 'wp_rest' ),
-				'syncs'     => new \stdClass(),
+				'syncs'     => new stdClass(),
 				'i18n'      => $this->get_i18n_strings(),
 			] );
 		}
