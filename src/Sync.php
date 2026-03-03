@@ -50,15 +50,16 @@ final class Sync {
 	 * @var array
 	 */
 	private array $defaults = [
-		'hook_suffix'      => '',
-		'capability'       => 'manage_options',
-		'title'            => '',
-		'button_label'     => 'Sync',
-		'button_class'     => 'button',
-		'container'        => '.wp-list-table',
-		'data_callback'    => null,
-		'process_callback' => null,
-		'name_callback'    => null,
+		'hook_suffix'        => '',
+		'capability'         => 'manage_options',
+		'title'              => '',
+		'button_label'       => 'Sync',
+		'button_class'       => 'button',
+		'container'          => '.wp-list-table',
+		'reload_on_complete' => true,
+		'data_callback'      => null,
+		'process_callback'   => null,
+		'name_callback'      => null,
 	];
 
 	/**
@@ -74,9 +75,9 @@ final class Sync {
 	 * @type string       $button_label     Button text. Default 'Sync'.
 	 * @type string       $button_class     CSS class for the button. Default 'button'.
 	 * @type string       $container        CSS selector for the element the bar inserts before. Default
-	 *       '.wp-list-table'.
+	 *                                      '.wp-list-table'.
 	 * @type callable     $data_callback    Fetches items. Receives (string $cursor). Returns array with items,
-	 *       has_more, cursor, total.
+	 *                                      has_more, cursor, total.
 	 * @type callable     $process_callback Processes one item. Returns 'created'|'updated'|'skipped'|WP_Error.
 	 * @type callable     $name_callback    Extracts display name from an item. Receives (mixed $item). Returns string.
 	 *                                      }
@@ -157,8 +158,9 @@ final class Sync {
 			'InlineSyncConfig.syncs[%s] = %s;',
 			wp_json_encode( $this->id ),
 			wp_json_encode( [
-				'title'     => $this->config['title'],
-				'container' => $this->config['container'],
+				'title'              => $this->config['title'],
+				'container'          => $this->config['container'],
+				'reload_on_complete' => $this->config['reload_on_complete'],
 			] )
 		), 'before' );
 	}

@@ -379,7 +379,10 @@
                 html += '</div>';
             }
 
-            html += '<span class="inline-sync-reloading">' + i18n.reloading + '</span>';
+            // Auto-reload message (only if reloading)
+            if (config.reload_on_complete !== false) {
+                html += '<span class="inline-sync-reloading">' + i18n.reloading + '</span>';
+            }
 
             $bar.find('.inline-sync-result').html(html).show();
 
@@ -388,9 +391,11 @@
             $(document).trigger('inline-sync:complete', [syncId, totals]);
 
             // Auto-reload after brief delay so user can read the summary
-            setTimeout(function () {
-                window.location.reload();
-            }, 1500);
+            if (config.reload_on_complete !== false) {
+                setTimeout(function () {
+                    window.location.reload();
+                }, 1500);
+            }
         },
 
         /**
