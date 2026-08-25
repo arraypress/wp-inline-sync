@@ -25,6 +25,8 @@ declare( strict_types=1 );
 
 namespace ArrayPress\InlineSync;
 
+use ArrayPress\InlineSync\Utils\Runtime;
+
 use Exception;
 use WP_Error;
 use WP_REST_Request;
@@ -46,7 +48,17 @@ final class RestApi {
 	 * @since 1.0.0
 	 * @var string
 	 */
-	const NAMESPACE = 'inline-sync/v1';
+	/**
+	 * The REST namespace, derived per build.
+	 *
+	 * Not a constant: a constant is fixed at compile time and identical in
+	 * every prefixed copy, which is the collision this avoids.
+	 *
+	 * @return string
+	 */
+	public static function rest_namespace(): string {
+		return Runtime::rest_namespace();
+	}
 
 	/**
 	 * Default number of items to process per chunk.
@@ -96,7 +108,7 @@ final class RestApi {
 	 */
 	public static function register_routes(): void {
 		// Phase 1: Fetch items from source and cache them
-		register_rest_route( self::NAMESPACE, '/fetch', [
+		register_rest_route( self::rest_namespace(), '/fetch', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ __CLASS__, 'handle_fetch' ],
 			'permission_callback' => [ __CLASS__, 'check_permission' ],
@@ -114,7 +126,7 @@ final class RestApi {
 		] );
 
 		// Phase 2: Process a chunk of cached items
-		register_rest_route( self::NAMESPACE, '/process', [
+		register_rest_route( self::rest_namespace(), '/process', [
 			'methods'             => WP_REST_Server::CREATABLE,
 			'callback'            => [ __CLASS__, 'handle_process' ],
 			'permission_callback' => [ __CLASS__, 'check_permission' ],
@@ -338,33 +350,33 @@ final class RestApi {
 			$item      = $entry['data'];
 			$item_name = $entry['name'];
 
-			$results['processed'] ++;
+			++$results['processed'];
 
 			try {
 				$result = call_user_func( $process_callback, $item );
 
 				if ( is_wp_error( $result ) ) {
-					$results['failed'] ++;
+					++$results['failed'];
 					$results['items'][] = [
 						'name'   => $item_name,
 						'status' => 'failed',
 						'error'  => $result->get_error_message(),
 					];
 				} elseif ( in_array( $result, [ 'created', 'updated', 'skipped' ], true ) ) {
-					$results[ $result ] ++;
+					++$results[ $result ];
 					$results['items'][] = [
 						'name'   => $item_name,
 						'status' => $result,
 					];
 				} else {
-					$results['created'] ++;
+					++$results['created'];
 					$results['items'][] = [
 						'name'   => $item_name,
 						'status' => 'created',
 					];
 				}
 			} catch ( Exception $e ) {
-				$results['failed'] ++;
+				++$results['failed'];
 				$results['items'][] = [
 					'name'   => $item_name,
 					'status' => 'failed',
@@ -420,7 +432,7 @@ final class RestApi {
 	private static function get_transient_key( string $sync_id ): string {
 		$user_id = get_current_user_id();
 
-		return 'inline_sync_' . $sync_id . '_' . $user_id;
+		return Runtime::key( $sync_id . '_' . $user_id );
 	}
 
 	/**
@@ -456,5 +468,4 @@ final class RestApi {
 
 		return '';
 	}
-
 }

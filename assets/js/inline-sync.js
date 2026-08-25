@@ -21,11 +21,37 @@
 (function ($) {
     'use strict';
 
-    if (typeof InlineSyncConfig === 'undefined') {
+    if (typeof window.InlineSyncConfig === 'undefined') {
         return;
     }
 
-    const {restUrl, restNonce, syncs, i18n} = InlineSyncConfig;
+    /*
+     * Bind once, however many copies of this file load.
+     *
+     * Strauss gives each prefixed copy its own script handle, so two plugins
+     * bundling this library both enqueue it and the browser runs it twice.
+     * Without this guard every button gets two click handlers and every sync
+     * runs twice against the same cursor.
+     */
+    if (window.InlineSync && window.InlineSync.__bound) {
+        return;
+    }
+
+    const syncs = window.InlineSyncConfig.syncs;
+
+    /**
+     * Everything a sync needs to talk to its own build.
+     *
+     * Each build has its own REST namespace, so the endpoint belongs to the
+     * sync rather than to the page.
+     *
+     * @param {string} syncId Registered sync ID.
+     *
+     * @return {Object} The sync's configuration.
+     */
+    function configFor(syncId) {
+        return syncs[syncId] || {};
+    }
 
     /**
      * Track cancelled syncs.
@@ -38,6 +64,14 @@
      * Public API.
      */
     window.InlineSync = {
+
+        /**
+         * Set once this file has bound its handlers.
+         *
+         * Read by the guard at the top: a second copy of this script, loaded
+         * under another plugin's prefixed handle, returns before rebinding.
+         */
+        __bound: true,
 
         /**
          * Start a sync by ID.
@@ -121,12 +155,12 @@
 
             // Show fetching state
             const config = syncs[syncId] || {};
-            $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.fetching);
+            $bar.find('.inline-sync-title').text(config.title + ' — ' + config.i18n.fetching);
 
             $.ajax({
-                url: restUrl + 'fetch',
+                url: config.restUrl + 'fetch',
                 method: 'POST',
-                headers: {'X-WP-Nonce': restNonce},
+                headers: {'X-WP-Nonce': config.restNonce},
                 contentType: 'application/json',
                 data: JSON.stringify({
                     sync_id: syncId,
@@ -151,7 +185,7 @@
                 };
 
                 // Update title to syncing
-                $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.syncing);
+                $bar.find('.inline-sync-title').text(config.title + ' — ' + config.i18n.syncing);
 
                 if (response.fetched === 0) {
                     // Nothing fetched — done
@@ -169,7 +203,7 @@
                 this._processChunk($bar, syncId, totals, pageInfo);
 
             }).fail((xhr) => {
-                const msg = xhr.responseJSON?.message || i18n.syncFailed;
+                const msg = xhr.responseJSON?.message || config.i18n.syncFailed;
                 this._showError($bar, syncId, msg);
             });
         },
@@ -187,15 +221,16 @@
          * @private
          */
         _processChunk: function ($bar, syncId, totals, pageInfo) {
+            const config = configFor(syncId);
             if (cancelled[syncId]) {
                 this._showCancelled($bar, syncId);
                 return;
             }
 
             $.ajax({
-                url: restUrl + 'process',
+                url: config.restUrl + 'process',
                 method: 'POST',
-                headers: {'X-WP-Nonce': restNonce},
+                headers: {'X-WP-Nonce': config.restNonce},
                 contentType: 'application/json',
                 data: JSON.stringify({
                     sync_id: syncId
@@ -223,7 +258,7 @@
                 }
 
                 // Update progress bar
-                this._updateProgress($bar, totals, response.items);
+                this._updateProgress($bar, totals, response.items, syncId);
 
                 if (!response.page_done) {
                     // More chunks in this page
@@ -237,7 +272,7 @@
                 }
 
             }).fail((xhr) => {
-                const msg = xhr.responseJSON?.message || i18n.syncFailed;
+                const msg = xhr.responseJSON?.message || config.i18n.syncFailed;
                 this._showError($bar, syncId, msg);
             });
         },
@@ -254,13 +289,14 @@
          * @private
          */
         _createBar: function (syncId) {
+            const config = configFor(syncId);
             const self = this;
 
             return $([
                 '<div class="inline-sync-bar" data-sync-id="' + this._esc(syncId) + '">',
                 '  <div class="inline-sync-header">',
                 '    <div class="inline-sync-title"></div>',
-                '    <button type="button" class="inline-sync-cancel">' + i18n.cancel + '</button>',
+                '    <button type="button" class="inline-sync-cancel">' + config.i18n.cancel + '</button>',
                 '  </div>',
                 '  <div class="inline-sync-progress">',
                 '    <div class="inline-sync-track">',
@@ -274,7 +310,7 @@
                 '  <div class="inline-sync-result"></div>',
                 '</div>'
             ].join('\n')).on('click', '.inline-sync-cancel', function () {
-                if (confirm(i18n.confirmCancel)) {
+                if (confirm(config.i18n.confirmCancel)) {
                     self.cancel(syncId);
                 }
             }).on('click', '.inline-sync-dismiss', function () {
@@ -291,7 +327,7 @@
          */
         _resetBar: function ($bar, config) {
             $bar.removeClass('is-complete is-error').addClass('is-active');
-            $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.fetching);
+            $bar.find('.inline-sync-title').text(config.title + ' — ' + config.i18n.fetching);
             $bar.find('.inline-sync-fill').css('width', '0%');
             $bar.find('.inline-sync-count').text('');
             $bar.find('.inline-sync-current').text('');
@@ -309,7 +345,8 @@
          * @param {array}  items  Items from current chunk.
          * @private
          */
-        _updateProgress: function ($bar, totals, items) {
+        _updateProgress: function ($bar, totals, items, syncId) {
+            const config = configFor(syncId || $bar.data('sync-id'));
             // Determine the best total we have
             const displayTotal = totals.total || totals._fetched || null;
 
@@ -322,8 +359,8 @@
 
             // Count text
             const countText = displayTotal
-                ? totals.processed + ' ' + i18n.of + ' ' + displayTotal
-                : totals.processed + ' ' + i18n.items;
+                ? totals.processed + ' ' + config.i18n.of + ' ' + displayTotal
+                : totals.processed + ' ' + config.i18n.items;
             $bar.find('.inline-sync-count').text(countText);
 
             // Current item name (last item in chunk)
@@ -348,17 +385,17 @@
             $bar.find('.inline-sync-fill').css('width', '100%');
 
             const config = syncs[syncId] || {};
-            $bar.find('.inline-sync-title').text(config.title + ' — ' + i18n.complete);
+            $bar.find('.inline-sync-title').text(config.title + ' — ' + config.i18n.complete);
 
             // Summary
             const total = totals.created + totals.updated + totals.skipped + totals.failed;
             const parts = [];
 
-            if (totals.created > 0) parts.push(totals.created + ' ' + i18n.created);
-            if (totals.updated > 0) parts.push(totals.updated + ' ' + i18n.updated);
-            if (totals.skipped > 0) parts.push(totals.skipped + ' ' + i18n.skipped);
+            if (totals.created > 0) parts.push(totals.created + ' ' + config.i18n.created);
+            if (totals.updated > 0) parts.push(totals.updated + ' ' + config.i18n.updated);
+            if (totals.skipped > 0) parts.push(totals.skipped + ' ' + config.i18n.skipped);
 
-            let html = '<span>' + total + ' ' + i18n.items + ' synced';
+            let html = '<span>' + total + ' ' + config.i18n.items + ' synced';
             if (parts.length > 0) {
                 html += ' — ' + parts.join(', ');
             }
@@ -367,7 +404,7 @@
             // Errors
             if (totals.failed > 0) {
                 html += '<div class="inline-sync-error-summary">';
-                html += totals.failed + ' ' + i18n.failed + '.';
+                html += totals.failed + ' ' + config.i18n.failed + '.';
 
                 const show = totals.errors.slice(0, 3);
                 if (show.length > 0) {
@@ -381,7 +418,7 @@
 
             // Auto-reload message (only if reloading)
             if (config.reload_on_complete !== false) {
-                html += '<span class="inline-sync-reloading">' + i18n.reloading + '</span>';
+                html += '<span class="inline-sync-reloading">' + config.i18n.reloading + '</span>';
             }
 
             $bar.find('.inline-sync-result').html(html).show();
@@ -413,8 +450,8 @@
 
             $bar.find('.inline-sync-result')
                 .html(
-                    '<span>' + i18n.cancelled + '</span>' +
-                    '<button type="button" class="inline-sync-dismiss">' + i18n.dismiss + '</button>'
+                    '<span>' + config.i18n.cancelled + '</span>' +
+                    '<button type="button" class="inline-sync-dismiss">' + config.i18n.dismiss + '</button>'
                 )
                 .show();
 
@@ -440,7 +477,7 @@
             $bar.find('.inline-sync-result')
                 .html(
                     '<span>' + this._esc(message) + '</span>' +
-                    '<button type="button" class="inline-sync-dismiss">' + i18n.dismiss + '</button>'
+                    '<button type="button" class="inline-sync-dismiss">' + config.i18n.dismiss + '</button>'
                 )
                 .show();
 

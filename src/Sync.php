@@ -16,6 +16,8 @@ declare( strict_types=1 );
 
 namespace ArrayPress\InlineSync;
 
+use ArrayPress\InlineSync\Utils\Runtime;
+
 use stdClass;
 
 /**
@@ -138,31 +140,46 @@ final class Sync {
 	 * @since 1.0.0
 	 */
 	private function enqueue_assets(): void {
-		$handle = 'inline-sync';
+		$handle = Runtime::handle();
 
-		// Enqueue shared assets once
 		if ( ! wp_script_is( $handle ) ) {
 			wp_enqueue_composer_style( $handle, __FILE__, 'css/inline-sync.css' );
 			wp_enqueue_composer_script( $handle, __FILE__, 'js/inline-sync.js', [ 'jquery' ] );
 
-			wp_localize_script( $handle, 'InlineSyncConfig', [
-				'restUrl'   => rest_url( RestApi::NAMESPACE . '/' ),
-				'restNonce' => wp_create_nonce( 'wp_rest' ),
-				'syncs'     => new stdClass(),
-				'i18n'      => $this->get_i18n_strings(),
-			] );
+			// Merged into rather than assigned over.
+			//
+			// Strauss gives each prefixed copy its own handle, so two plugins
+			// bundling this library both enqueue the script and both localise.
+			// Assigning `InlineSyncConfig` would mean whichever ran last owned
+			// it and the other plugin's syncs were simply absent, with nothing
+			// reporting it.
+			//
+			// The strings live per sync rather than globally for the same
+			// reason: every build has its own REST namespace, so there is no
+			// one endpoint the shared object could hold.
+			wp_add_inline_script(
+				$handle,
+				'window.InlineSyncConfig = window.InlineSyncConfig || { syncs: {} };',
+				'before'
+			);
 		}
 
-		// Add this sync's config to the JS data
-		wp_add_inline_script( $handle, sprintf(
-			'InlineSyncConfig.syncs[%s] = %s;',
-			wp_json_encode( $this->id ),
-			wp_json_encode( [
-				'title'              => $this->config['title'],
-				'container'          => $this->config['container'],
-				'reload_on_complete' => $this->config['reload_on_complete'],
-			] )
-		), 'before' );
+		wp_add_inline_script(
+			$handle,
+			sprintf(
+				'window.InlineSyncConfig.syncs[%s] = %s;',
+				wp_json_encode( $this->id ),
+				wp_json_encode( [
+					'title'              => $this->config['title'],
+					'container'          => $this->config['container'],
+					'reload_on_complete' => $this->config['reload_on_complete'],
+					'restUrl'            => rest_url( RestApi::rest_namespace() . '/' ),
+					'restNonce'          => wp_create_nonce( 'wp_rest' ),
+					'i18n'               => $this->get_i18n_strings(),
+				] )
+			),
+			'before'
+		);
 	}
 
 	/**
@@ -268,14 +285,14 @@ final class Sync {
 	 * Get a config value.
 	 *
 	 * @param string $key     Config key.
-	 * @param mixed  $default Default value.
+	 * @param mixed  $fallback Value to use when the key is not set.
 	 *
 	 * @return mixed
 	 * @since 1.0.0
 	 *
 	 */
-	public function get_config( string $key, mixed $default = null ): mixed {
-		return $this->config[ $key ] ?? $default;
+	public function get_config( string $key, mixed $fallback = null ): mixed {
+		return $this->config[ $key ] ?? $fallback;
 	}
 
 	/**
@@ -316,5 +333,4 @@ final class Sync {
 
 		return is_callable( $callback ) ? $callback : null;
 	}
-
 }
