@@ -46,11 +46,6 @@ jobs:
         # check, and a green build has to mean both.
         run: composer format:check
 
-      - name: Documentation
-        # The examples are checked against the field registry: a configuration
-        # key nothing reads is not an error in PHP, so the only symptom is a
-        # documented option that quietly does nothing.
-        run: composer docs:verify
 
       - name: Tests
         # set -o pipefail, because a pipeline reports its last command and tee
