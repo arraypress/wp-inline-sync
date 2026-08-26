@@ -238,8 +238,10 @@ final class Sync {
 		$class     = $args['class'] ?? $this->config['button_class'];
 		$container = $args['container'] ?? $this->config['container'];
 
+		// No glyph in front of the label: core draws none on its own
+		// buttons, and the spinning state is core's .updating-message.
 		printf(
-			'<button type="button" class="%s inline-sync-trigger" data-sync-id="%s" data-container="%s"><span class="dashicons dashicons-update"></span> %s</button>',
+			'<button type="button" class="%s inline-sync-trigger" data-sync-id="%s" data-container="%s">%s</button>',
 			esc_attr( $class ),
 			esc_attr( $this->id ),
 			esc_attr( $container ),

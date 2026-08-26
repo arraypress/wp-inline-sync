@@ -98,7 +98,11 @@
 
             // Disable trigger button
             const $trigger = $('.inline-sync-trigger[data-sync-id="' + syncId + '"]');
-            $trigger.addClass('is-syncing').prop('disabled', true);
+            // updating-message is core's own busy state for a button: the
+            // spinning glyph, its colour and its reduced-motion handling are
+            // already written, in common.css, on the class core puts on a
+            // plugin's Update button.
+            $trigger.addClass('is-syncing updating-message').prop('disabled', true);
 
             // Create or reset bar
             let $bar = $container.prev('.inline-sync-bar[data-sync-id="' + syncId + '"]');
@@ -494,7 +498,7 @@
          */
         _enableTrigger: function (syncId) {
             $('.inline-sync-trigger[data-sync-id="' + syncId + '"]')
-                .removeClass('is-syncing')
+                .removeClass('is-syncing updating-message')
                 .prop('disabled', false);
         },
 
