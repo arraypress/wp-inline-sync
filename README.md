@@ -53,6 +53,10 @@ render_sync_button( 'stripe_prices' );
 `process_callback` gets one record at a time and does whatever the import
 means — the loop between them is not yours to write.
 
+Register on `init`, not `admin_init`. The button is an admin thing, but the
+work happens over REST, and `admin_init` does not run on a REST request — a
+sync registered there has a button and no endpoint behind it.
+
 ## Requirements
 
 * PHP 8.3 or later

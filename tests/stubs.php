@@ -3,8 +3,9 @@
  * Enough WordPress to register a sync against.
  *
  * Every declaration is guarded, because wp-composer-assets is a real
- * dependency and ships its own wp_enqueue_composer_* functions -- redeclaring
- * one is a fatal in the bootstrap, which reads as the suite being broken.
+ * dependency and ships its own arraypress_enqueue_composer_* functions --
+ * redeclaring one is a fatal in the bootstrap, which reads as the suite being
+ * broken. This file loads before the autoloader, so these stubs win.
  *
  * @package ArrayPress\InlineSync
  */
@@ -93,12 +94,12 @@ if ( ! function_exists( 'wp_create_nonce' ) ) {
 	function wp_create_nonce( $action = -1 ) { return 'nonce-' . $action; }
 }
 
-if ( ! function_exists( 'wp_enqueue_composer_style' ) ) {
-	function wp_enqueue_composer_style( $handle, $file, $path, $deps = [] ) { $GLOBALS['is_scripts'][ $handle ] = true; }
+if ( ! function_exists( 'arraypress_enqueue_composer_style' ) ) {
+	function arraypress_enqueue_composer_style( $handle, $file, $path, $deps = [] ) { $GLOBALS['is_scripts'][ $handle ] = true; }
 }
 
-if ( ! function_exists( 'wp_enqueue_composer_script' ) ) {
-	function wp_enqueue_composer_script( $handle, $file, $path, $deps = [] ) { $GLOBALS['is_scripts'][ $handle ] = true; }
+if ( ! function_exists( 'arraypress_enqueue_composer_script' ) ) {
+	function arraypress_enqueue_composer_script( $handle, $file, $path, $deps = [] ) { $GLOBALS['is_scripts'][ $handle ] = true; }
 }
 
 if ( ! function_exists( 'wp_script_is' ) ) {

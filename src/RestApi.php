@@ -27,7 +27,7 @@ namespace ArrayPress\InlineSync;
 
 use ArrayPress\InlineSync\Utils\Runtime;
 
-use Exception;
+use Throwable;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -209,10 +209,12 @@ final class RestApi {
 			);
 		}
 
-		// Fetch items from source
+		// Fetch items from source. Throwable, not Exception: a TypeError in
+		// the callback is just as much a failed fetch, and uncaught it is a
+		// blank 500 the JavaScript can only report as "Sync failed".
 		try {
 			$fetch = call_user_func( $data_callback, $cursor );
-		} catch ( Exception $e ) {
+		} catch ( Throwable $e ) {
 			return new WP_Error(
 				'fetch_error',
 				$e->getMessage(),
@@ -220,7 +222,7 @@ final class RestApi {
 			);
 		}
 
-		if ( ! is_array( $fetch ) || ! isset( $fetch['items'] ) ) {
+		if ( ! is_array( $fetch ) || ! isset( $fetch['items'] ) || ! is_array( $fetch['items'] ) ) {
 			return new WP_Error(
 				'invalid_fetch_result',
 				__( 'Data callback returned an invalid result.', 'arraypress' ),
@@ -240,9 +242,7 @@ final class RestApi {
 		foreach ( $items as $item ) {
 			$named_items[] = [
 				'data' => $item,
-				'name' => $name_callback
-					? (string) call_user_func( $name_callback, $item )
-					: self::guess_item_name( $item ),
+				'name' => self::item_name( $item, $name_callback ),
 			];
 		}
 
@@ -362,6 +362,16 @@ final class RestApi {
 						'status' => 'failed',
 						'error'  => $result->get_error_message(),
 					];
+				} elseif ( false === $result ) {
+					// The plainest way a callback has of saying no. It used to
+					// be counted as created, which is the opposite of what it
+					// said.
+					++$results['failed'];
+					$results['items'][] = [
+						'name'   => $item_name,
+						'status' => 'failed',
+						'error'  => __( 'The item could not be processed.', 'arraypress' ),
+					];
 				} elseif ( in_array( $result, [ 'created', 'updated', 'skipped' ], true ) ) {
 					++$results[ $result ];
 					$results['items'][] = [
@@ -375,7 +385,7 @@ final class RestApi {
 						'status' => 'created',
 					];
 				}
-			} catch ( Exception $e ) {
+			} catch ( Throwable $e ) {
 				++$results['failed'];
 				$results['items'][] = [
 					'name'   => $item_name,
@@ -433,6 +443,29 @@ final class RestApi {
 		$user_id = get_current_user_id();
 
 		return Runtime::key( $sync_id . '_' . $user_id );
+	}
+
+	/**
+	 * The name shown for an item while it is processed.
+	 *
+	 * A name callback that throws is not worth abandoning the fetch over;
+	 * the name is decoration on a progress bar.
+	 *
+	 * @param mixed         $item          Item from the data callback.
+	 * @param callable|null $name_callback The sync's name callback, if any.
+	 *
+	 * @return string
+	 */
+	private static function item_name( mixed $item, ?callable $name_callback ): string {
+		if ( null === $name_callback ) {
+			return self::guess_item_name( $item );
+		}
+
+		try {
+			return (string) call_user_func( $name_callback, $item );
+		} catch ( Throwable $e ) {
+			return self::guess_item_name( $item );
+		}
 	}
 
 	/**

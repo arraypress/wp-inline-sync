@@ -399,7 +399,7 @@
             if (totals.updated > 0) parts.push(totals.updated + ' ' + config.i18n.updated);
             if (totals.skipped > 0) parts.push(totals.skipped + ' ' + config.i18n.skipped);
 
-            let html = '<span>' + total + ' ' + config.i18n.items + ' synced';
+            let html = '<span>' + total + ' ' + config.i18n.items + ' ' + config.i18n.synced;
             if (parts.length > 0) {
                 html += ' — ' + parts.join(', ');
             }

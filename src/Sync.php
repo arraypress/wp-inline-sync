@@ -80,7 +80,8 @@ final class Sync {
 	 *                                      '.wp-list-table'.
 	 * @type callable     $data_callback    Fetches items. Receives (string $cursor). Returns array with items,
 	 *                                      has_more, cursor, total.
-	 * @type callable     $process_callback Processes one item. Returns 'created'|'updated'|'skipped'|WP_Error.
+	 * @type callable     $process_callback Processes one item. Returns 'created'|'updated'|'skipped', a WP_Error
+	 *                                      or false for a failure; anything else counts as created.
 	 * @type callable     $name_callback    Extracts display name from an item. Receives (mixed $item). Returns string.
 	 *                                      }
 	 * @since 1.0.0
@@ -143,8 +144,8 @@ final class Sync {
 		$handle = Runtime::handle();
 
 		if ( ! wp_script_is( $handle ) ) {
-			wp_enqueue_composer_style( $handle, __FILE__, 'css/inline-sync.css' );
-			wp_enqueue_composer_script( $handle, __FILE__, 'js/inline-sync.js', [ 'jquery' ] );
+			arraypress_enqueue_composer_style( $handle, __FILE__, 'css/inline-sync.css' );
+			arraypress_enqueue_composer_script( $handle, __FILE__, 'js/inline-sync.js', [ 'jquery' ] );
 
 			// Merged into rather than assigned over.
 			//
@@ -202,6 +203,7 @@ final class Sync {
 			'skipped'       => __( 'skipped', 'arraypress' ),
 			'failed'        => __( 'failed', 'arraypress' ),
 			'items'         => __( 'items', 'arraypress' ),
+			'synced'        => __( 'synced', 'arraypress' ),
 			'of'            => __( 'of', 'arraypress' ),
 			'syncFailed'    => __( 'Sync failed. Please try again.', 'arraypress' ),
 			'dismiss'       => __( 'Dismiss', 'arraypress' ),

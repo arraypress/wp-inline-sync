@@ -261,4 +261,173 @@ final class SyncTest extends TestCase {
 			$inline
 		);
 	}
+	/**
+	 * A page of records, as the data callback would hand them over.
+	 *
+	 * @param int $count How many.
+	 *
+	 * @return array
+	 */
+	private static function page( int $count ): array {
+		$items = array();
+
+		for ( $i = 1; $i <= $count; $i++ ) {
+			$items[] = (object) array( 'id' => 'price_' . $i, 'name' => 'Item ' . $i );
+		}
+
+		return array( 'items' => $items, 'has_more' => false, 'cursor' => '', 'total' => $count );
+	}
+
+	/**
+	 * Processing walks the staged page in chunks and reports each record.
+	 *
+	 * The whole point of the two phases: a page of seven is processed five
+	 * at a time so the progress bar moves, and the staged page is cleaned
+	 * up when it is exhausted.
+	 */
+	public function test_a_page_is_processed_in_chunks(): void {
+		$seen = array();
+
+		$this->sync(
+			array(
+				'data_callback'    => static fn( $cursor ) => self::page( RestApi::CHUNK_SIZE + 2 ),
+				'process_callback' => static function ( $item ) use ( &$seen ) {
+					$seen[] = $item->id;
+
+					return 'updated';
+				},
+			)
+		);
+
+		RestApi::handle_fetch( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$first = RestApi::handle_process( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) )->get_data();
+
+		$this->assertSame( RestApi::CHUNK_SIZE, $first['processed'] );
+		$this->assertSame( RestApi::CHUNK_SIZE, $first['updated'] );
+		$this->assertFalse( $first['page_done'] );
+		$this->assertSame( 2, $first['remaining'] );
+		$this->assertSame( 'Item ' . RestApi::CHUNK_SIZE, end( $first['items'] )['name'] );
+
+		$second = RestApi::handle_process( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) )->get_data();
+
+		$this->assertSame( 2, $second['processed'] );
+		$this->assertTrue( $second['page_done'] );
+		$this->assertSame( 0, $second['remaining'] );
+
+		$this->assertCount( RestApi::CHUNK_SIZE + 2, $seen );
+		$this->assertSame( 'price_1', $seen[0] );
+		$this->assertSame( array(), $GLOBALS['is_transients'], 'The staged page was not cleaned up.' );
+	}
+
+	/**
+	 * Processing before fetching is a refusal, not a loop over nothing.
+	 */
+	public function test_processing_before_fetching_is_refused(): void {
+		$this->sync();
+
+		$response = RestApi::handle_process( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'no_cached_items', $response->get_error_code() );
+	}
+
+	/**
+	 * One record failing does not abandon the rest of the run.
+	 *
+	 * Three ways a callback can fail -- a WP_Error, an exception, and plain
+	 * false -- and each is one failed record with the others still processed.
+	 * False used to be counted as created, which is the opposite of what it
+	 * said.
+	 */
+	public function test_a_failing_record_is_reported_and_the_rest_continue(): void {
+		$this->sync(
+			array(
+				'data_callback'    => static fn( $cursor ) => self::page( 4 ),
+				'process_callback' => static fn( $item ) => match ( $item->id ) {
+					'price_1' => new WP_Error( 'bad', 'No such price' ),
+					'price_2' => throw new \RuntimeException( 'Stripe hiccup' ),
+					'price_3' => false,
+					default   => 'created',
+				},
+			)
+		);
+
+		RestApi::handle_fetch( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$data = RestApi::handle_process( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) )->get_data();
+
+		$this->assertSame( 4, $data['processed'] );
+		$this->assertSame( 3, $data['failed'] );
+		$this->assertSame( 1, $data['created'] );
+		$this->assertSame( 'No such price', $data['items'][0]['error'] );
+		$this->assertSame( 'Stripe hiccup', $data['items'][1]['error'] );
+		$this->assertSame( 'failed', $data['items'][2]['status'] );
+		$this->assertSame( 'created', $data['items'][3]['status'] );
+	}
+
+	/**
+	 * An Error in a callback is an error response, not a blank 500.
+	 *
+	 * Exception was caught; a TypeError or a DivisionByZeroError is an Error,
+	 * which went straight through and left the JavaScript with nothing to
+	 * say but "Sync failed".
+	 */
+	public function test_an_error_in_a_callback_is_caught(): void {
+		$this->sync( array( 'data_callback' => static fn( $cursor ) => intdiv( 1, 0 ) ) );
+
+		$response = RestApi::handle_fetch( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'fetch_error', $response->get_error_code() );
+		$this->assertSame( 'Division by zero', $response->get_error_message() );
+	}
+
+	/**
+	 * A name callback that throws does not abandon the fetch.
+	 *
+	 * The name is decoration on a progress bar.
+	 */
+	public function test_a_throwing_name_callback_falls_back(): void {
+		$this->sync( array( 'name_callback' => static fn( $item ) => throw new \RuntimeException( 'no name' ) ) );
+
+		$response = RestApi::handle_fetch( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $response );
+
+		$staged = reset( $GLOBALS['is_transients'] );
+
+		$this->assertSame( 'Small', $staged['items'][0]['name'], 'The guessed name was not used.' );
+	}
+
+	/**
+	 * A data callback returning items that are not a list is refused.
+	 */
+	public function test_items_that_are_not_a_list_are_refused(): void {
+		$this->sync( array( 'data_callback' => static fn( $cursor ) => array( 'items' => 'price_1' ) ) );
+
+		$response = RestApi::handle_fetch( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'invalid_fetch_result', $response->get_error_code() );
+	}
+
+	/**
+	 * A staged page belongs to the user who fetched it.
+	 *
+	 * Two administrators syncing at once must not process each other's
+	 * pages.
+	 */
+	public function test_a_staged_page_belongs_to_the_user_who_fetched_it(): void {
+		$this->sync();
+
+		RestApi::handle_fetch( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$GLOBALS['is_user_id'] = 2;
+
+		$response = RestApi::handle_process( new WP_REST_Request( array( 'sync_id' => 'stripe_prices' ) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'no_cached_items', $response->get_error_code() );
+	}
 }
